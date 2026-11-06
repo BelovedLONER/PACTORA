@@ -1,0 +1,346 @@
+// SPDX-License-Identifier: MIT
+pragma solidity ^0.8.24;
+
+/**
+ * @title PACTORA Escrow
+ * @dev Agreement-based on-chain escrow for Robinhood Chain EVM.
+ *
+ * Workflow (implemented):
+ *   1. Creator drafts an agreement (status: Draft).
+ *   2. Both parties accept terms (status: Draft -> Accepted).
+ *   3. Buyer funds escrow with a supported ERC-20 stablecoin (status: Funded).
+ *   4. Seller confirms delivery (status: Funded -> In Progress).
+ *   5. Buyer approves release; contract transfers funds to seller (status: Completed).
+ *
+ * Rules enforced on-chain:
+ *   - Only the buyer can deposit funds.
+ *   - Only the buyer can release funds to the seller after delivery confirmation.
+ *   - Either party may cancel before funding; funds (if any) return to the buyer.
+ *   - After funding, cancellation requires both parties to sign, releasing funds back to the buyer.
+ *   - A dispute can be opened by either party after funding; funds stay locked until resolved.
+ *
+ * NOTICE: This prototype is unaudited. Do not use with real funds.
+ * PACTORA makes no claim that this contract is audited, insured, risk-free, or fully decentralized.
+ */
+
+interface IERC20 {
+    function transfer(address to, uint256 amount) external returns (bool);
+    function transferFrom(address from, address to, uint256 amount) external returns (bool);
+    function allowance(address owner, address spender) external view returns (uint256);
+    function approve(address spender, uint256 amount) external returns (bool);
+    function decimals() external view returns (uint8);
+    function symbol() external view returns (string memory);
+}
+
+enum AgreementStatus {
+    Draft,
+    AwaitingAcceptance,
+    Accepted,
+    Funded,
+    InProgress,
+    Completed,
+    Cancelled,
+    Disputed
+}
+
+struct Agreement {
+    uint256 id;
+    address creator;
+    address buyer;
+    address seller;
+    address token;
+    uint256 amount;
+    uint256 deadline;
+    string title;
+    string description;
+    string terms;
+    AgreementStatus status;
+    bool buyerAccepted;
+    bool sellerAccepted;
+    bool deliveryConfirmed;
+    bool cancelledByBuyer;
+    bool cancelledBySeller;
+    bool disputed;
+    uint256 createdAt;
+    uint256 updatedAt;
+    uint256 fundedAt;
+    uint256 releasedAt;
+}
+
+event AgreementCreated(uint256 indexed id, address indexed creator, address indexed buyer, address indexed seller, address token, uint256 amount, uint256 deadline);
+event AgreementAccepted(uint256 indexed id, address indexed party);
+event AgreementFunded(uint256 indexed id, address indexed buyer, uint256 amount);
+event DeliveryConfirmed(uint256 indexed id, address indexed seller);
+event FundsReleased(uint256 indexed id, address indexed seller, uint256 amount);
+event AgreementCancelled(uint256 indexed id, address indexed by);
+event AgreementDisputed(uint256 indexed id, address indexed by);
+event DisputeResolved(uint256 indexed id, address indexed resolver, bool releasedToSeller);
+
+contract PACTORAEscrow {
+    address public immutable owner;
+    mapping(uint256 => Agreement) public agreements;
+    mapping(address => bool) public supportedTokens;
+    uint256 public agreementCount;
+
+    modifier onlyOwner() {
+        require(msg.sender == owner, "PACTORA: only owner");
+        _;
+    }
+
+    modifier onlyBuyer(uint256 id) {
+        require(agreements[id].buyer == msg.sender, "PACTORA: only buyer");
+        _;
+    }
+
+    modifier onlySeller(uint256 id) {
+        require(agreements[id].seller == msg.sender, "PACTORA: only seller");
+        _;
+    }
+
+    modifier onlyParty(uint256 id) {
+        require(msg.sender == agreements[id].buyer || msg.sender == agreements[id].seller, "PACTORA: only party");
+        _;
+    }
+
+    modifier statusIs(uint256 id, AgreementStatus expected) {
+        require(agreements[id].status == expected, "PACTORA: invalid status");
+        _;
+    }
+
+    modifier tokenSupported(address token) {
+        require(supportedTokens[token], "PACTORA: token not supported");
+        _;
+    }
+
+    constructor() {
+        owner = msg.sender;
+    }
+
+    function addSupportedToken(address token) external onlyOwner {
+        supportedTokens[token] = true;
+    }
+
+    function removeSupportedToken(address token) external onlyOwner {
+        supportedTokens[token] = false;
+    }
+
+    function createAgreement(
+        address buyer,
+        address seller,
+        address token,
+        uint256 amount,
+        uint256 deadline,
+        string calldata title,
+        string calldata description,
+        string calldata terms
+    ) external returns (uint256) {
+        require(buyer != address(0), "PACTORA: invalid buyer");
+        require(seller != address(0), "PACTORA: invalid seller");
+        require(buyer != seller, "PACTORA: buyer and seller must differ");
+        require(amount > 0, "PACTORA: amount must be greater than zero");
+        require(deadline > block.timestamp, "PACTORA: deadline must be in the future");
+        require(tokenSupported[token], "PACTORA: token not supported");
+
+        uint256 id = ++agreementCount;
+        agreements[id] = Agreement({
+            id: id,
+            creator: msg.sender,
+            buyer: buyer,
+            seller: seller,
+            token: token,
+            amount: amount,
+            deadline: deadline,
+            title: title,
+            description: description,
+            terms: terms,
+            status: AgreementStatus.Draft,
+            buyerAccepted: false,
+            sellerAccepted: false,
+            deliveryConfirmed: false,
+            cancelledByBuyer: false,
+            cancelledBySeller: false,
+            disputed: false,
+            createdAt: block.timestamp,
+            updatedAt: block.timestamp,
+            fundedAt: 0,
+            releasedAt: 0
+        });
+
+        emit AgreementCreated(id, msg.sender, buyer, seller, token, amount, deadline);
+        return id;
+    }
+
+    function acceptAgreement(uint256 id) external onlyParty(id) statusIs(id, AgreementStatus.Draft) {
+        require(!agreements[id].buyerAccepted || !agreements[id].sellerAccepted, "PACTORA: already accepted");
+
+        if (msg.sender == agreements[id].buyer) {
+            agreements[id].buyerAccepted = true;
+        } else {
+            agreements[id].sellerAccepted = true;
+        }
+
+        if (agreements[id].buyerAccepted && agreements[id].sellerAccepted) {
+            agreements[id].status = AgreementStatus.Accepted;
+        }
+        agreements[id].updatedAt = block.timestamp;
+
+        emit AgreementAccepted(id, msg.sender);
+    }
+
+    function fundEscrow(uint256 id) external onlyBuyer(id) statusIs(id, AgreementStatus.Accepted) tokenSupported(agreements[id].token) {
+        address token = agreements[id].token;
+        uint256 amount = agreements[id].amount;
+
+        require(IERC20(token).transferFrom(msg.sender, address(this), amount), "PACTORA: transferFrom failed");
+
+        agreements[id].status = AgreementStatus.Funded;
+        agreements[id].fundedAt = block.timestamp;
+        agreements[id].updatedAt = block.timestamp;
+
+        emit AgreementFunded(id, msg.sender, amount);
+    }
+
+    function confirmDelivery(uint256 id) external onlySeller(id) statusIs(id, AgreementStatus.Funded) {
+        require(block.timestamp <= agreements[id].deadline, "PACTORA: delivery deadline passed");
+
+        agreements[id].deliveryConfirmed = true;
+        agreements[id].status = AgreementStatus.InProgress;
+        agreements[id].updatedAt = block.timestamp;
+
+        emit DeliveryConfirmed(id, msg.sender);
+    }
+
+    function releaseFunds(uint256 id) external onlyBuyer(id) statusIs(id, AgreementStatus.InProgress) {
+        address token = agreements[id].token;
+        address seller = agreements[id].seller;
+        uint256 amount = agreements[id].amount;
+
+        require(IERC20(token).transfer(seller, amount), "PACTORA: transfer to seller failed");
+
+        agreements[id].status = AgreementStatus.Completed;
+        agreements[id].releasedAt = block.timestamp;
+        agreements[id].updatedAt = block.timestamp;
+
+        emit FundsReleased(id, seller, amount);
+    }
+
+    function cancelBeforeFunding(uint256 id) external onlyParty(id) {
+        require(agreements[id].status == AgreementStatus.Draft || agreements[id].status == AgreementStatus.Accepted, "PACTORA: cannot cancel at this stage");
+
+        if (msg.sender == agreements[id].buyer) {
+            agreements[id].cancelledByBuyer = true;
+        } else {
+            agreements[id].cancelledBySeller = true;
+        }
+
+        if (agreements[id].cancelledByBuyer && agreements[id].cancelledBySeller) {
+            agreements[id].status = AgreementStatus.Cancelled;
+        }
+        agreements[id].updatedAt = block.timestamp;
+
+        emit AgreementCancelled(id, msg.sender);
+    }
+
+    function cancelAfterFunding(uint256 id) external onlyParty(id) statusIs(id, AgreementStatus.Funded) {
+        if (msg.sender == agreements[id].buyer) {
+            require(!agreements[id].cancelledByBuyer, "PACTORA: buyer already cancelled");
+            agreements[id].cancelledByBuyer = true;
+        } else {
+            require(!agreements[id].cancelledBySeller, "PACTORA: seller already cancelled");
+            agreements[id].cancelledBySeller = true;
+        }
+
+        if (agreements[id].cancelledByBuyer && agreements[id].cancelledBySeller) {
+            address token = agreements[id].token;
+            address buyer = agreements[id].buyer;
+            uint256 amount = agreements[id].amount;
+
+            agreements[id].status = AgreementStatus.Cancelled;
+            agreements[id].updatedAt = block.timestamp;
+
+            require(IERC20(token).transfer(buyer, amount), "PACTORA: refund to buyer failed");
+
+            emit AgreementCancelled(id, msg.sender);
+        }
+    }
+
+    function openDispute(uint256 id) external onlyParty(id) {
+        require(agreements[id].status == AgreementStatus.Funded || agreements[id].status == AgreementStatus.InProgress, "PACTORA: cannot dispute at this stage");
+
+        agreements[id].disputed = true;
+        agreements[id].status = AgreementStatus.Disputed;
+        agreements[id].updatedAt = block.timestamp;
+
+        emit AgreementDisputed(id, msg.sender);
+    }
+
+    function resolveDispute(uint256 id, bool releasedToSeller) external onlyOwner statusIs(id, AgreementStatus.Disputed) {
+        address token = agreements[id].token;
+        uint256 amount = agreements[id].amount;
+
+        if (releasedToSeller) {
+            require(IERC20(token).transfer(agreements[id].seller, amount), "PACTORA: transfer to seller failed");
+        } else {
+            require(IERC20(token).transfer(agreements[id].buyer, amount), "PACTORA: refund to buyer failed");
+        }
+
+        agreements[id].status = releasedToSeller ? AgreementStatus.Completed : AgreementStatus.Cancelled;
+        agreements[id].releasedAt = block.timestamp;
+        agreements[id].updatedAt = block.timestamp;
+
+        emit DisputeResolved(id, msg.sender, releasedToSeller);
+    }
+
+    function getAgreement(uint256 id) external view returns (
+        uint256 id_,
+        address creator,
+        address buyer,
+        address seller,
+        address token,
+        uint256 amount,
+        uint256 deadline,
+        string memory title,
+        string memory description,
+        string memory terms,
+        uint8 status,
+        bool buyerAccepted,
+        bool sellerAccepted,
+        bool deliveryConfirmed,
+        bool cancelledByBuyer,
+        bool cancelledBySeller,
+        bool disputed,
+        uint256 createdAt,
+        uint256 updatedAt,
+        uint256 fundedAt,
+        uint256 releasedAt
+    ) {
+        Agreement storage a = agreements[id];
+        return (
+            a.id,
+            a.creator,
+            a.buyer,
+            a.seller,
+            a.token,
+            a.amount,
+            a.deadline,
+            a.title,
+            a.description,
+            a.terms,
+            uint8(a.status),
+            a.buyerAccepted,
+            a.sellerAccepted,
+            a.deliveryConfirmed,
+            a.cancelledByBuyer,
+            a.cancelledBySeller,
+            a.disputed,
+            a.createdAt,
+            a.updatedAt,
+            a.fundedAt,
+            a.releasedAt
+        );
+    }
+
+    function balanceOf(address token, address account) external view returns (uint256) {
+        return IERC20(token).balanceOf(account);
+    }
+}

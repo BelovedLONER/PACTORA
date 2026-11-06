@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" fill="none">
+  <defs>
+    <linearGradient id="pactoraGradient" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#438BFF" />
+      <stop offset="100%" stop-color="#0B1424" />
+    </linearGradient>
+  </defs>
+  <rect width="64" height="64" rx="16" fill="#0B1424" />
+  <path d="M32 11 L19 11 L19 36 L29 36 L29 19 L35 19 L35 36 L45 36 L45 11 L32 11 Z" fill="url(#pactoraGradient)" />
+  <path d="M25 17 L25 29 L31 29 L31 17 Z" fill="#0B1424" />
+  <path d="M19 16 L45 16 L45 22 L19 22 Z" fill="#0B1424" />
+  <circle cx="32" cy="32" r="26" stroke="url(#pactoraGradient)" stroke-width="3" />
+  <path d="M32 32 A22 22 0 0 1 54 32" stroke="#438BFF" stroke-width="3" stroke-dasharray="4 4" />
+  <path d="M10 32 A22 22 0 0 0 10 32" stroke="#438BFF" stroke-width="3" opacity="0.4" />
+</svg>
