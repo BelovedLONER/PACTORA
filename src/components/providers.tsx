@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { WagmiProvider, createConfig, http, cookieStorage, createStorage } from "wagmi";
 import { RainbowKitProvider } from "@rainbow-me/rainbowkit";
 import { useEffect, useState } from "react";
+import { RPC_URL, BLOCK_EXPLORER_URL } from "@/lib/env";
 
 const robinhoodTestnet = {
   id: 9999,
@@ -12,16 +13,16 @@ const robinhoodTestnet = {
   nativeCurrency: { name: "Robinhood", symbol: "ROB", decimals: 18 },
   rpcUrls: {
     default: {
-      http: [process.env.NEXT_PUBLIC_ROBINHOOD_TESTNET_RPC_URL || "https://testnet.rpc.robinhood.com"],
+      http: [RPC_URL],
     },
     public: {
-      http: [process.env.NEXT_PUBLIC_ROBINHOOD_TESTNET_RPC_URL || "https://testnet.rpc.robinhood.com"],
+      http: [RPC_URL],
     },
   },
   blockExplorers: {
     default: {
       name: "Explorer",
-      url: process.env.NEXT_PUBLIC_BLOCK_EXPLORER_URL || "https://testnet.explorer.robinhood.com",
+      url: BLOCK_EXPLORER_URL,
     },
   },
 } as const;
@@ -29,7 +30,7 @@ const robinhoodTestnet = {
 const config = createConfig({
   chains: [robinhoodTestnet],
   transports: {
-    [robinhoodTestnet.id]: http(process.env.NEXT_PUBLIC_ROBINHOOD_TESTNET_RPC_URL),
+    [robinhoodTestnet.id]: http(RPC_URL),
   },
   storage: createStorage({
     storage: cookieStorage,

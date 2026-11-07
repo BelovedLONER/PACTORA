@@ -7,6 +7,7 @@ import Link from "next/link";
 import { useAccount, useWriteContract, useWaitForTransactionReceipt } from "wagmi";
 import { parseUnits } from "viem";
 import { FileText, UserPlus, Shield, Calendar, Coins, ArrowRight, Info } from "lucide-react";
+import { ESCROW_CONTRACT_ADDRESS } from "@/lib/env";
 
 const ESCROW_ABI = [
   {
@@ -86,6 +87,10 @@ export default function CreateAgreementPage() {
       setErrors({ wallet: "Please connect your wallet" });
       return;
     }
+    if (!ESCROW_CONTRACT_ADDRESS) {
+      setErrors({ wallet: "Escrow contract address is not configured" });
+      return;
+    }
 
     setSubmitting(true);
     const deadline = Math.floor(new Date(form.deadline).getTime() / 1000);
@@ -94,7 +99,7 @@ export default function CreateAgreementPage() {
 
     try {
       const txHash = await (writeContract as any)({
-        address: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ADDRESS as `0x${string}`,
+        address: ESCROW_CONTRACT_ADDRESS,
         abi: ESCROW_ABI,
         functionName: "createAgreement",
         args: [
