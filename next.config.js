@@ -25,6 +25,10 @@ const nextConfig = {
       stubsDir,
       "get-proto.js"
     );
+    config.resolve.alias["get-proto/Object.getPrototypeOf"] = path.resolve(
+      stubsDir,
+      "get-proto-Object-getPrototypeOf.js"
+    );
     config.resolve.alias["call-bind"] = path.resolve(
       stubsDir,
       "call-bind.js"
