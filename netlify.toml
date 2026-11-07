@@ -1,0 +1,21 @@
+[build]
+  command = "npm run build"
+  publish = ".next"
+  function_directory = "netlify/functions"
+
+[build.environment]
+  NEXT_PUBLIC_ROBINHOOD_TESTNET_RPC_URL = "@robinhood_testnet_rpc_url"
+  NEXT_PUBLIC_BLOCK_EXPLORER_URL = "@block_explorer_url"
+  NEXT_PUBLIC_ESCROW_CONTRACT_ADDRESS = "@escrow_contract_address"
+  NEXT_PUBLIC_SUPABASE_URL = "@supabase_url"
+  NEXT_PUBLIC_SUPABASE_ANON_KEY = "@supabase_anon_key"
+  NEXT_PUBLIC_SITE_URL = "@site_url"
+
+[build.cache]
+  paths = [
+    "node_modules",
+    ".next/cache"
+  ]
+
+[[plugins]]
+  package = "@netlify/plugin-nextjs"
