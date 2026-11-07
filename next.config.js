@@ -6,8 +6,11 @@ const nextConfig = {
   },
   transpilePackages: ["@rainbow-me/rainbowkit"],
   webpack: (config) => {
-    config.resolve.alias["ts-interface-checker"] =
-      require("path").resolve(__dirname, "node_modules/ts-interface-checker-stub/index.js");
+    // Alias for compatibility shims applied by postinstall script
+    config.resolve.alias["ts-interface-checker"] = require("path").resolve(
+      __dirname,
+      "node_modules/ts-interface-checker/dist/index.js"
+    );
     return config;
   },
 };
