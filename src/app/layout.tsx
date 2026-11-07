@@ -3,12 +3,13 @@ import "./globals.css";
 import { Providers } from "@/components/providers";
 import { Navigation } from "@/components/navigation";
 import { Footer } from "@/components/footer";
+import { SITE_URL } from "@/lib/env";
 
 export const metadata: Metadata = {
   title: "PACTORA — Agreements That Settle",
   description:
     "Global on-chain escrow platform built on Robinhood Chain. Secure transactions with anyone, anywhere. Agreements that settle.",
-  metadataBase: new URL(process.env.NEXT_PUBLIC_SITE_URL || "http://localhost:3000"),
+  metadataBase: new URL(SITE_URL),
   openGraph: {
     siteName: "PACTORA",
     title: "PACTORA — Agreements That Settle",

@@ -6,6 +6,7 @@ import { useAccount, useContractRead } from "wagmi";
 import { useState } from "react";
 import { CreditCard, Shield, AlertTriangle, Activity, DollarSign, Users } from "lucide-react";
 import { formatUnits, parseUnits } from "viem";
+import { ESCROW_CONTRACT_ADDRESS } from "@/lib/env";
 
 const ESCROW_ABI = [
   { type: "function", name: "agreementCount", stateMutability: "view", inputs: [], outputs: [{ type: "uint256", name: "" }] },
@@ -22,7 +23,7 @@ export default function OverviewPage() {
   const [agreement, setAgreement] = useState<any>(null);
 
   const { data: agreementCount, isLoading: countLoading } = useContractRead({
-    address: process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ADDRESS as `0x${string}`,
+    address: ESCROW_CONTRACT_ADDRESS,
     abi: ESCROW_ABI,
     functionName: "agreementCount",
   });
@@ -130,8 +131,7 @@ export default function OverviewPage() {
 
   function fetchAgreement(id: number) {
     if (
-      !process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ADDRESS ||
-      !/^0x[a-fA-F0-9]{40}$/.test(process.env.NEXT_PUBLIC_ESCROW_CONTRACT_ADDRESS)
+      !ESCROW_CONTRACT_ADDRESS
     ) {
       setAgreement({ id, status: 0, amount: 0 });
       return;

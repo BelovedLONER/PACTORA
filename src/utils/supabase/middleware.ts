@@ -1,5 +1,6 @@
 import { createServerClient } from "@supabase/ssr";
 import { NextResponse, type NextRequest } from "next/server";
+import { SUPABASE_URL, SUPABASE_ANON_KEY } from "@/lib/env";
 
 export async function middleware(request: NextRequest) {
   let response = NextResponse.next({
@@ -8,9 +9,17 @@ export async function middleware(request: NextRequest) {
     },
   });
 
+  const supabaseUrl = SUPABASE_URL;
+  const supabaseAnonKey = SUPABASE_ANON_KEY;
+
+  // Supabase is optional — skip session refresh when it isn't configured.
+  if (!supabaseUrl || !supabaseAnonKey) {
+    return response;
+  }
+
   const supabase = createServerClient(
-    process.env.NEXT_PUBLIC_SUPABASE_URL!,
-    process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY!,
+    supabaseUrl,
+    supabaseAnonKey,
     {
       cookies: {
         getAll() {
